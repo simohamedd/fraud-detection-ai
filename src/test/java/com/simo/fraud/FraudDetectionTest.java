@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.file.Path;
 import java.util.List;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.Test;
 
 class FraudDetectionTest {
@@ -68,5 +70,18 @@ class FraudDetectionTest {
         assertEquals(Transaction.FEATURES.length, reasons.size());
         assertTrue(reasons.get(0).logOdds() > 0, "top reason should raise the risk");
         assertTrue(Math.abs(reasons.get(0).logOdds()) >= Math.abs(reasons.get(5).logOdds()));
+    }
+
+    @Test
+    void savedModelScoresExactlyLikeTheOriginal(@TempDir Path dir) throws Exception {
+        List<Transaction> data = SyntheticData.generate(12_000, 9);
+        FraudDetector original = FraudDetector.train(data.subList(0, 8_000), 9);
+        original.calibrate(data.subList(8_000, 12_000));
+        Path file = dir.resolve("model.properties");
+        original.save(file);
+
+        FraudDetector loaded = FraudDetector.load(file);
+        assertEquals(original.threshold(), loaded.threshold(), 0);
+        for (Transaction t : data.subList(0, 200)) assertEquals(original.score(t), loaded.score(t), 1e-12);
     }
 }

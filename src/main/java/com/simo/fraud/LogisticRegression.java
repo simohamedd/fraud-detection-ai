@@ -57,6 +57,14 @@ public class LogisticRegression {
         return this;
     }
 
+    /** Restores a model trained earlier. */
+    static LogisticRegression fromWeights(double[] weights, double bias) {
+        LogisticRegression m = new LogisticRegression(0, 0, 0, 1);
+        m.w = weights.clone();
+        m.b = bias;
+        return m;
+    }
+
     /** Probability that the example is positive (fraud). */
     public double predictProbability(double[] row) {
         if (w == null) throw new IllegalStateException("Call fit() first");

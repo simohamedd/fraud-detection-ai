@@ -19,6 +19,16 @@ public class StandardScaler {
         return this;
     }
 
+    double[] mean() { return mean.clone(); }
+    double[] std() { return std.clone(); }
+
+    static StandardScaler of(double[] mean, double[] std) {
+        StandardScaler s = new StandardScaler();
+        s.mean = mean.clone();
+        s.std = std.clone();
+        return s;
+    }
+
     public double[] transform(double[] row) {
         if (mean == null) throw new IllegalStateException("Call fit() first");
         double[] out = new double[row.length];
