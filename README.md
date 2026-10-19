@@ -10,7 +10,8 @@ Detects fraudulent card transactions with a logistic regression model written fr
 3. **Scaling:** `StandardScaler` puts every feature on the same scale, fitted on training data only.
 4. **Model:** `LogisticRegression` trained by mini-batch gradient descent with L2 regularisation. Fraud examples are weighted up so the rare class isn't ignored.
 5. **Threshold:** chosen on a separate validation set to maximise F1.
-6. **Evaluation:** precision, recall, F1, confusion matrix and ROC AUC on a test set the model never saw.
+6. **Explanations:** `explain()` breaks each score into how much every signal raised or lowered the risk, so an analyst can see why a payment was blocked.
+7. **Evaluation:** precision, recall, F1, confusion matrix and ROC AUC on a test set the model never saw.
 
 ## Run
 ```bash

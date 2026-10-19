@@ -37,5 +37,7 @@ public class FraudApp {
 
     private static void show(FraudDetector d, Transaction t, String label) {
         System.out.printf("  %-34s risk %5.1f%%  -> %s%n", label, 100 * d.score(t), d.isFraud(t) ? "BLOCK and alert" : "approve");
+        d.explain(t).stream().limit(3).forEach(c ->
+                System.out.printf("      %s %s the risk (%+.2f)%n", c.feature(), c.logOdds() >= 0 ? "raised" : "lowered", c.logOdds()));
     }
 }
