@@ -60,4 +60,13 @@ class FraudDetectionTest {
         assertFalse(d.isFraud(new Transaction(12.5, 12, 2, 0.1, false, 0, false)));
         assertTrue(d.isFraud(new Transaction(1500, 3, 900, 0.9, true, 5, false)));
     }
+
+    @Test
+    void explanationNamesTheSignalsBehindAFlag() {
+        FraudDetector d = FraudDetector.train(SyntheticData.generate(15_000, 8), 8);
+        var reasons = d.explain(new Transaction(1500, 3, 900, 0.9, true, 5, false));
+        assertEquals(Transaction.FEATURES.length, reasons.size());
+        assertTrue(reasons.get(0).logOdds() > 0, "top reason should raise the risk");
+        assertTrue(Math.abs(reasons.get(0).logOdds()) >= Math.abs(reasons.get(5).logOdds()));
+    }
 }

@@ -1,5 +1,7 @@
 package com.simo.fraud;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /** Ties together feature scaling, the model and a decision threshold. */
@@ -41,6 +43,19 @@ public class FraudDetector {
 
     public double[] scores(List<Transaction> data) {
         return data.stream().mapToDouble(this::score).toArray();
+    }
+
+    /** How much one feature pushed the score up (positive) or down (negative), in log-odds. */
+    public record Contribution(String feature, double logOdds) { }
+
+    /** Breaks a score down into each feature's contribution, biggest effect first. */
+    public List<Contribution> explain(Transaction t) {
+        double[] x = scaler.transform(t.features());
+        double[] w = model.weights();
+        List<Contribution> out = new ArrayList<>();
+        for (int j = 0; j < w.length; j++) out.add(new Contribution(Transaction.FEATURES[j], w[j] * x[j]));
+        out.sort(Comparator.comparingDouble((Contribution c) -> Math.abs(c.logOdds())).reversed());
+        return out;
     }
 
     public double threshold() {
