@@ -5,7 +5,7 @@ import java.util.List;
 /** Trains the fraud model on synthetic data and reports how well it does. Run with: mvn -q compile exec:java */
 public class FraudApp {
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws java.io.IOException {
         List<Transaction> all = SyntheticData.generate(30_000, 7);
         List<Transaction> train = all.subList(0, 18_000);
         List<Transaction> validation = all.subList(18_000, 24_000);
@@ -29,6 +29,11 @@ public class FraudApp {
         System.out.println("\nWhat the model learned (weights on scaled features, higher = more suspicious):");
         double[] w = detector.weights();
         for (int j = 0; j < w.length; j++) System.out.printf("  %-15s %+.2f%n", Transaction.FEATURES[j], w[j]);
+
+        java.nio.file.Path saved = java.nio.file.Path.of("fraud-model.properties");
+        detector.save(saved);
+        detector = FraudDetector.load(saved);
+        System.out.println("\nSaved the model to " + saved + " and loaded it back.");
 
         System.out.println("\nScoring two new purchases:");
         show(detector, new Transaction(18.40, 13, 3, 0.15, false, 0, false), "£18.40 lunch near home");
