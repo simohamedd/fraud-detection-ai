@@ -2,10 +2,12 @@ package com.simo.fraud;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
 import java.util.List;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.Test;
 
@@ -70,6 +72,36 @@ class FraudDetectionTest {
         assertEquals(Transaction.FEATURES.length, reasons.size());
         assertTrue(reasons.get(0).logOdds() > 0, "top reason should raise the risk");
         assertTrue(Math.abs(reasons.get(0).logOdds()) >= Math.abs(reasons.get(5).logOdds()));
+    }
+
+    @Test
+    void invalidTransactionsAreRejectedInsteadOfSilentlyApproved() {
+        // A negative amount used to give log1p(-5000) = NaN, a NaN score and an "approve" decision.
+        assertInvalid(() -> new Transaction(-5000, 3, 900, 0.9, true, 5, false), "amount");
+        assertInvalid(() -> new Transaction(Double.NaN, 12, 2, 0.1, false, 0, false), "amount");
+        assertInvalid(() -> new Transaction(Double.POSITIVE_INFINITY, 12, 2, 0.1, false, 0, false), "amount");
+        assertInvalid(() -> new Transaction(20, 12, -1, 0.1, false, 0, false), "distanceFromHomeKm");
+        assertInvalid(() -> new Transaction(20, 12, Double.NaN, 0.1, false, 0, false), "distanceFromHomeKm");
+        assertInvalid(() -> new Transaction(20, 24, 2, 0.1, false, 0, false), "hourOfDay");
+        assertInvalid(() -> new Transaction(20, -1, 2, 0.1, false, 0, false), "hourOfDay");
+        assertInvalid(() -> new Transaction(20, 12, 2, 1.5, false, 0, false), "merchantRisk");
+        assertInvalid(() -> new Transaction(20, 12, 2, Double.NaN, false, 0, false), "merchantRisk");
+        assertInvalid(() -> new Transaction(20, 12, 2, 0.1, false, -2, false), "txLastHour");
+    }
+
+    @Test
+    void boundaryValuesAreStillAccepted() {
+        FraudDetector d = FraudDetector.train(SyntheticData.generate(10_000, 4), 4);
+        for (Transaction t : List.of(new Transaction(0, 0, 0, 0, false, 0, false),
+                new Transaction(5000, 23, 20_000, 1, true, 30, false))) {
+            double s = d.score(t);
+            assertTrue(s >= 0 && s <= 1, "score should be a probability, got " + s);
+        }
+    }
+
+    private static void assertInvalid(Executable create, String field) {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, create);
+        assertTrue(e.getMessage().startsWith(field), "message should name " + field + ": " + e.getMessage());
     }
 
     @Test
