@@ -54,13 +54,42 @@ public final class Metrics {
         return (rankSumPos - pos * (pos + 1) / 2.0) / (pos * neg);
     }
 
-    /** The threshold with the best F1 score, searched over the observed scores. */
+    /**
+     * The threshold with the best F1 score, searched over the observed scores.
+     *
+     * <p>Every distinct score is tried as a cut-off in one pass over the sorted scores, so the
+     * result is exact rather than limited to a 0.01 grid. The threshold returned sits halfway
+     * between the chosen score and the next lower one, leaving a margin on both sides.
+     * Returns 0.5 when there are no fraud examples to learn from.
+     */
     public static double bestF1Threshold(double[] scores, boolean[] y) {
+        if (scores.length != y.length) throw new IllegalArgumentException("scores and labels differ in length");
+        int totalPos = 0;
+        for (int i = 0; i < y.length; i++) {
+            if (Double.isNaN(scores[i])) throw new IllegalArgumentException("score " + i + " is NaN");
+            if (y[i]) totalPos++;
+        }
+        if (totalPos == 0) return 0.5;
+
+        Integer[] order = new Integer[scores.length];
+        for (int i = 0; i < order.length; i++) order[i] = i;
+        Arrays.sort(order, Comparator.comparingDouble((Integer i) -> scores[i]).reversed());
+
         double best = 0.5, bestF1 = -1;
-        for (int step = 1; step < 100; step++) {
-            double t = step / 100.0;
-            double f1 = confusion(scores, y, t).f1();
-            if (f1 > bestF1) { bestF1 = f1; best = t; }
+        int tp = 0, fp = 0;
+        int i = 0;
+        while (i < order.length) {
+            double s = scores[order[i]];
+            // Flag every example scoring at least s, ties included.
+            while (i < order.length && scores[order[i]] == s) {
+                if (y[order[i]]) tp++; else fp++;
+                i++;
+            }
+            double f1 = 2.0 * tp / (2.0 * tp + fp + (totalPos - tp));
+            if (f1 > bestF1) {
+                bestF1 = f1;
+                best = i < order.length ? (s + scores[order[i]]) / 2 : s;
+            }
         }
         return best;
     }
