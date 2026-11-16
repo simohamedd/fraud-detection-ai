@@ -46,7 +46,12 @@ public class FraudDetector {
         }
     }
 
-    /** Loads a model saved with {@link #save(Path)}, ready to score without retraining. */
+    /**
+     * Loads a model saved with {@link #save(Path)}, ready to score without retraining.
+     *
+     * @throws IOException if the file can't be read, or is incomplete or damaged in a way that
+     *         would make the detector crash or stop flagging fraud
+     */
     public static FraudDetector load(Path file) throws IOException {
         Properties p = new Properties();
         try (Reader r = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
@@ -55,10 +60,22 @@ public class FraudDetector {
         if (!String.join(",", Transaction.FEATURES).equals(p.getProperty("features"))) {
             throw new IOException("This model was saved with different features and can't be loaded");
         }
-        FraudDetector d = new FraudDetector(
-                StandardScaler.of(split(p.getProperty("mean")), split(p.getProperty("std"))),
-                LogisticRegression.fromWeights(split(p.getProperty("weights")), Double.parseDouble(p.getProperty("bias"))));
-        d.threshold = Double.parseDouble(p.getProperty("threshold"));
+        int n = Transaction.FEATURES.length;
+        double[] mean = values(p, "mean", n);
+        double[] std = values(p, "std", n);
+        for (int j = 0; j < n; j++) {
+            if (!(std[j] > 0)) {
+                throw new IOException("Model file has a non-positive std for " + Transaction.FEATURES[j] + ": " + std[j]);
+            }
+        }
+        double[] weights = values(p, "weights", n);
+        double bias = value(p, "bias");
+        double threshold = value(p, "threshold");
+        if (threshold < 0 || threshold > 1) {
+            throw new IOException("Model file has a threshold outside 0-1: " + threshold);
+        }
+        FraudDetector d = new FraudDetector(StandardScaler.of(mean, std), LogisticRegression.fromWeights(weights, bias));
+        d.threshold = threshold;
         return d;
     }
 
@@ -66,9 +83,36 @@ public class FraudDetector {
         return String.join(",", Arrays.stream(v).mapToObj(Double::toString).toList());
     }
 
-    private static double[] split(String s) {
-        if (s == null) throw new IllegalArgumentException("Model file is missing a value");
-        return Arrays.stream(s.split(",")).mapToDouble(Double::parseDouble).toArray();
+    private static double[] values(Properties p, String key, int expected) throws IOException {
+        String raw = required(p, key);
+        String[] parts = raw.split(",", -1);
+        if (parts.length != expected) {
+            throw new IOException("Model file has " + parts.length + " values for '" + key + "', expected " + expected);
+        }
+        double[] out = new double[expected];
+        for (int j = 0; j < expected; j++) out[j] = parse(key + "[" + j + "]", parts[j]);
+        return out;
+    }
+
+    private static double value(Properties p, String key) throws IOException {
+        return parse(key, required(p, key));
+    }
+
+    private static String required(Properties p, String key) throws IOException {
+        String v = p.getProperty(key);
+        if (v == null || v.isBlank()) throw new IOException("Model file is missing '" + key + "'");
+        return v;
+    }
+
+    private static double parse(String name, String text) throws IOException {
+        double v;
+        try {
+            v = Double.parseDouble(text.trim());
+        } catch (NumberFormatException e) {
+            throw new IOException("Model file has an invalid number for " + name + ": '" + text + "'", e);
+        }
+        if (!Double.isFinite(v)) throw new IOException("Model file has a non-finite value for " + name + ": " + v);
+        return v;
     }
 
     public static FraudDetector train(List<Transaction> data, long seed) {
