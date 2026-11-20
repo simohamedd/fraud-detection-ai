@@ -3,7 +3,7 @@ package com.simo.fraud;
 import java.util.Arrays;
 import java.util.Comparator;
 
-/** Evaluation for a binary classifier: confusion matrix, precision, recall, F1 and ROC AUC. */
+/** Evaluation for a binary classifier: confusion matrix, precision, recall, F1, ROC AUC and average precision. */
 public final class Metrics {
 
     public record Confusion(int truePositives, int falsePositives, int trueNegatives, int falseNegatives) {
@@ -52,6 +52,45 @@ public final class Metrics {
         long neg = scores.length - pos;
         if (pos == 0 || neg == 0) return Double.NaN;
         return (rankSumPos - pos * (pos + 1) / 2.0) / (pos * neg);
+    }
+
+    /**
+     * Average precision: the area under the precision-recall curve.
+     *
+     * <p>Scores are taken from highest to lowest, and each fraud caught adds its share of recall
+     * weighted by the precision at that point. Tied scores are flagged together, as they would be
+     * by a threshold. Unlike ROC AUC this ignores how well the many genuine purchases are ranked
+     * among themselves, so it is the more honest number when fraud is rare: a random model scores
+     * about the fraud rate, a perfect one 1. Returns NaN when there are no fraud examples.
+     */
+    public static double averagePrecision(double[] scores, boolean[] y) {
+        if (scores.length != y.length) throw new IllegalArgumentException("scores and labels differ in length");
+        int totalPos = 0;
+        for (int i = 0; i < y.length; i++) {
+            if (Double.isNaN(scores[i])) throw new IllegalArgumentException("score " + i + " is NaN");
+            if (y[i]) totalPos++;
+        }
+        if (totalPos == 0) return Double.NaN;
+
+        Integer[] order = new Integer[scores.length];
+        for (int i = 0; i < order.length; i++) order[i] = i;
+        Arrays.sort(order, Comparator.comparingDouble((Integer i) -> scores[i]).reversed());
+
+        double ap = 0;
+        int tp = 0, flagged = 0;
+        int i = 0;
+        while (i < order.length) {
+            double s = scores[order[i]];
+            int newPos = 0;
+            while (i < order.length && scores[order[i]] == s) {
+                if (y[order[i]]) newPos++;
+                flagged++;
+                i++;
+            }
+            tp += newPos;
+            ap += (double) newPos / totalPos * tp / flagged;
+        }
+        return ap;
     }
 
     /**
