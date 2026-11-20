@@ -115,7 +115,14 @@ public class FraudDetector {
         return v;
     }
 
+    /**
+     * Trains a detector on labelled transactions.
+     *
+     * @throws IllegalArgumentException if the data is empty or doesn't contain both fraud and
+     *         genuine purchases, since there would be nothing for the model to separate
+     */
     public static FraudDetector train(List<Transaction> data, long seed) {
+        requireBothClasses(data, "Training data");
         double[][] x = features(data);
         boolean[] y = labels(data);
         FraudDetector d = new FraudDetector(new LogisticRegression(0.1, 1e-4, 40, LogisticRegression.balancedWeight(y)));
@@ -124,9 +131,26 @@ public class FraudDetector {
         return d;
     }
 
-    /** Chooses the threshold that maximises F1 on a held-out validation set. */
+    /**
+     * Chooses the threshold that maximises F1 on a held-out validation set.
+     *
+     * @throws IllegalArgumentException if the set is empty or lacks fraud or genuine purchases;
+     *         the current threshold is kept in that case
+     */
     public void calibrate(List<Transaction> validation) {
+        requireBothClasses(validation, "Validation data");
         threshold = Metrics.bestF1Threshold(scores(validation), labels(validation));
+    }
+
+    private static void requireBothClasses(List<Transaction> data, String what) {
+        if (data == null || data.isEmpty()) throw new IllegalArgumentException(what + " is empty");
+        long fraud = data.stream().filter(Transaction::fraud).count();
+        if (fraud == 0) {
+            throw new IllegalArgumentException(what + " has no fraud examples among " + data.size() + " transactions");
+        }
+        if (fraud == data.size()) {
+            throw new IllegalArgumentException(what + " has no genuine purchases among " + data.size() + " transactions");
+        }
     }
 
     public double score(Transaction t) {
