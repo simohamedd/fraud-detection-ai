@@ -142,6 +142,18 @@ public class FraudDetector {
         threshold = Metrics.bestF1Threshold(scores(validation), labels(validation));
     }
 
+    /**
+     * Sets the threshold to the highest value that still catches {@code targetRecall} of the fraud
+     * in a held-out validation set, keeping false alarms as low as that target allows.
+     *
+     * @throws IllegalArgumentException if the target isn't in (0, 1] or the set is empty or lacks
+     *         fraud or genuine purchases; the current threshold is kept in that case
+     */
+    public void calibrateForRecall(List<Transaction> validation, double targetRecall) {
+        requireBothClasses(validation, "Validation data");
+        threshold = Metrics.thresholdForRecall(scores(validation), labels(validation), targetRecall);
+    }
+
     private static void requireBothClasses(List<Transaction> data, String what) {
         if (data == null || data.isEmpty()) throw new IllegalArgumentException(what + " is empty");
         long fraud = data.stream().filter(Transaction::fraud).count();

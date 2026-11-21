@@ -28,6 +28,11 @@ public class FraudApp {
         System.out.printf("Confusion   caught %d, missed %d, false alarms %d, correctly passed %d%n",
                 c.truePositives(), c.falseNegatives(), c.falsePositives(), c.trueNegatives());
 
+        double t95 = Metrics.thresholdForRecall(detector.scores(validation), FraudDetector.labels(validation), 0.95);
+        Metrics.Confusion c95 = Metrics.confusion(scores, y, t95);
+        System.out.printf("Recall target  catching 95%% of validation fraud needs threshold %.2f: on test, recall %.1f%%, precision %.1f%%, false alarms %d%n",
+                t95, 100 * c95.recall(), 100 * c95.precision(), c95.falsePositives());
+
         System.out.println("\nWhat the model learned (weights on scaled features, higher = more suspicious):");
         double[] w = detector.weights();
         for (int j = 0; j < w.length; j++) System.out.printf("  %-15s %+.2f%n", Transaction.FEATURES[j], w[j]);
