@@ -132,4 +132,45 @@ public final class Metrics {
         }
         return best;
     }
+
+    /**
+     * The highest threshold that still catches at least {@code targetRecall} of the fraud.
+     *
+     * <p>Fraud teams often work to a recall target ("catch 90% of fraud") rather than the best F1,
+     * and then want as few false alarms as that allows. Scores are walked from highest to lowest,
+     * flagging tied scores together, until the target is met. Like {@link #bestF1Threshold}, the
+     * threshold returned sits halfway between that score and the next lower one.
+     *
+     * @throws IllegalArgumentException if the target isn't in (0, 1], the inputs differ in length,
+     *         a score is NaN, or there are no fraud examples to measure recall on
+     */
+    public static double thresholdForRecall(double[] scores, boolean[] y, double targetRecall) {
+        if (!(targetRecall > 0 && targetRecall <= 1)) {
+            throw new IllegalArgumentException("target recall must be in (0, 1], got " + targetRecall);
+        }
+        if (scores.length != y.length) throw new IllegalArgumentException("scores and labels differ in length");
+        int totalPos = 0;
+        for (int i = 0; i < y.length; i++) {
+            if (Double.isNaN(scores[i])) throw new IllegalArgumentException("score " + i + " is NaN");
+            if (y[i]) totalPos++;
+        }
+        if (totalPos == 0) throw new IllegalArgumentException("no fraud examples to measure recall on");
+
+        Integer[] order = new Integer[scores.length];
+        for (int i = 0; i < order.length; i++) order[i] = i;
+        Arrays.sort(order, Comparator.comparingDouble((Integer i) -> scores[i]).reversed());
+
+        // Compare counts rather than ratios so a target like 0.9 of 10 isn't missed by rounding.
+        int needed = (int) Math.ceil(targetRecall * totalPos - 1e-9);
+        int tp = 0;
+        int i = 0;
+        while (true) {
+            double s = scores[order[i]];
+            while (i < order.length && scores[order[i]] == s) {
+                if (y[order[i]]) tp++;
+                i++;
+            }
+            if (tp >= needed) return i < order.length ? (s + scores[order[i]]) / 2 : s;
+        }
+    }
 }
