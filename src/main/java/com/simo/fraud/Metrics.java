@@ -34,8 +34,18 @@ public final class Metrics {
         return new Confusion(tp, fp, tn, fn);
     }
 
-    /** Area under the ROC curve: the chance a random fraud scores higher than a random genuine purchase. */
+    /**
+     * Area under the ROC curve: the chance a random fraud scores higher than a random genuine purchase.
+     * Tied scores count as half. Returns NaN when either class is missing.
+     *
+     * @throws IllegalArgumentException if the inputs differ in length or a score is NaN, since a NaN
+     *         would otherwise be ranked above every real score and quietly inflate the result
+     */
     public static double rocAuc(double[] scores, boolean[] y) {
+        if (scores.length != y.length) throw new IllegalArgumentException("scores and labels differ in length");
+        for (int i = 0; i < scores.length; i++) {
+            if (Double.isNaN(scores[i])) throw new IllegalArgumentException("score " + i + " is NaN");
+        }
         Integer[] order = new Integer[scores.length];
         for (int i = 0; i < order.length; i++) order[i] = i;
         Arrays.sort(order, Comparator.comparingDouble(i -> scores[i]));
