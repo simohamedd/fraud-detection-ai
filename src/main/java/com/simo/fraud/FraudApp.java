@@ -22,6 +22,10 @@ public class FraudApp {
         System.out.printf("ROC AUC     %.3f%n", Metrics.rocAuc(scores, y));
         System.out.printf("Avg prec.   %.3f  (area under precision-recall; a random model gets about %.3f)%n",
                 Metrics.averagePrecision(scores, y), (double) (c.truePositives() + c.falseNegatives()) / y.length);
+        double fraudRate = (double) (c.truePositives() + c.falseNegatives()) / y.length;
+        double baseline = -(fraudRate * Math.log(fraudRate) + (1 - fraudRate) * Math.log(1 - fraudRate));
+        System.out.printf("Log loss    %.3f  (how honest the probabilities are; always guessing the fraud rate gets %.3f)%n",
+                Metrics.logLoss(scores, y), baseline);
         System.out.printf("Threshold   %.2f%n", detector.threshold());
         System.out.printf("Precision   %.1f%%  (of transactions flagged, how many were fraud)%n", 100 * c.precision());
         System.out.printf("Recall      %.1f%%  (of all fraud, how much was caught)%n", 100 * c.recall());

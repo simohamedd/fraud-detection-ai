@@ -3,7 +3,7 @@ package com.simo.fraud;
 import java.util.Arrays;
 import java.util.Comparator;
 
-/** Evaluation for a binary classifier: confusion matrix, precision, recall, F1, ROC AUC and average precision. */
+/** Evaluation for a binary classifier: confusion matrix, precision, recall, F1, ROC AUC, average precision and log loss. */
 public final class Metrics {
 
     public record Confusion(int truePositives, int falsePositives, int trueNegatives, int falseNegatives) {
@@ -101,6 +101,34 @@ public final class Metrics {
             ap += (double) newPos / totalPos * tp / flagged;
         }
         return ap;
+    }
+
+    /**
+     * Log loss (binary cross-entropy): the average of -log(probability given to the true outcome).
+     *
+     * <p>ROC AUC and average precision only look at how scores are ranked, so a model that says
+     * 51% for every fraud and 49% for every genuine purchase can look perfect on both. Log loss
+     * checks the probabilities themselves and punishes confident mistakes hard, which matters
+     * when the risk percentage is shown to an analyst. Lower is better: 0 is perfect, and always
+     * predicting the fraud rate p gives the entropy of the labels, about 0.135 for 3% fraud.
+     * Probabilities are clipped to [1e-15, 1 - 1e-15] so one certain mistake gives a large but
+     * finite loss.
+     *
+     * @throws IllegalArgumentException if the inputs are empty or differ in length, or a score is
+     *         NaN or outside 0-1
+     */
+    public static double logLoss(double[] scores, boolean[] y) {
+        if (scores.length != y.length) throw new IllegalArgumentException("scores and labels differ in length");
+        if (scores.length == 0) throw new IllegalArgumentException("no scores to evaluate");
+        final double eps = 1e-15;
+        double total = 0;
+        for (int i = 0; i < scores.length; i++) {
+            double s = scores[i];
+            if (!(s >= 0 && s <= 1)) throw new IllegalArgumentException("score " + i + " is not a probability: " + s);
+            double p = Math.min(Math.max(y[i] ? s : 1 - s, eps), 1 - eps);
+            total -= Math.log(p);
+        }
+        return total / scores.length;
     }
 
     /**
