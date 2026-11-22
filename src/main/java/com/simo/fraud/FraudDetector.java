@@ -18,6 +18,7 @@ public class FraudDetector {
     private final StandardScaler scaler;
     private final LogisticRegression model;
     private double threshold = 0.5;
+    private boolean trained;
 
     public FraudDetector() {
         this(new LogisticRegression(0.1, 1e-4, 40, 1));
@@ -34,6 +35,7 @@ public class FraudDetector {
 
     /** Saves the trained model (scaling, weights and threshold) as a small text file. */
     public void save(Path file) throws IOException {
+        requireTrained("save");
         Properties p = new Properties();
         p.setProperty("features", String.join(",", Transaction.FEATURES));
         p.setProperty("mean", join(scaler.mean()));
@@ -76,6 +78,7 @@ public class FraudDetector {
         }
         FraudDetector d = new FraudDetector(StandardScaler.of(mean, std), LogisticRegression.fromWeights(weights, bias));
         d.threshold = threshold;
+        d.trained = true;
         return d;
     }
 
@@ -128,6 +131,7 @@ public class FraudDetector {
         FraudDetector d = new FraudDetector(new LogisticRegression(0.1, 1e-4, 40, LogisticRegression.balancedWeight(y)));
         d.scaler.fit(x);
         d.model.fit(d.scaler.transform(x), y, seed);
+        d.trained = true;
         return d;
     }
 
@@ -138,6 +142,7 @@ public class FraudDetector {
      *         the current threshold is kept in that case
      */
     public void calibrate(List<Transaction> validation) {
+        requireTrained("calibrate");
         requireBothClasses(validation, "Validation data");
         threshold = Metrics.bestF1Threshold(scores(validation), labels(validation));
     }
@@ -150,6 +155,7 @@ public class FraudDetector {
      *         fraud or genuine purchases; the current threshold is kept in that case
      */
     public void calibrateForRecall(List<Transaction> validation, double targetRecall) {
+        requireTrained("calibrate");
         requireBothClasses(validation, "Validation data");
         threshold = Metrics.thresholdForRecall(scores(validation), labels(validation), targetRecall);
     }
@@ -165,7 +171,19 @@ public class FraudDetector {
         }
     }
 
+    /** Whether the detector has been trained or loaded and can score transactions. */
+    public boolean isTrained() {
+        return trained;
+    }
+
+    private void requireTrained(String action) {
+        if (!trained) {
+            throw new IllegalStateException("Can't " + action + " an untrained detector: use FraudDetector.train() or load() first");
+        }
+    }
+
     public double score(Transaction t) {
+        requireTrained("score with");
         return model.predictProbability(scaler.transform(t.features()));
     }
 
@@ -182,6 +200,7 @@ public class FraudDetector {
 
     /** Breaks a score down into each feature's contribution, biggest effect first. */
     public List<Contribution> explain(Transaction t) {
+        requireTrained("explain a score from");
         double[] x = scaler.transform(t.features());
         double[] w = model.weights();
         List<Contribution> out = new ArrayList<>();
@@ -195,6 +214,7 @@ public class FraudDetector {
     }
 
     public double[] weights() {
+        requireTrained("read the weights of");
         return model.weights();
     }
 
