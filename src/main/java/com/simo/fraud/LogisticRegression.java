@@ -4,7 +4,9 @@ import java.util.Random;
 
 /**
  * Binary logistic regression trained with mini-batch gradient descent and L2 regularisation.
- * Positive examples can be weighted more heavily, which matters when fraud is rare.
+ * Positive examples can be weighted more heavily, which matters when fraud is rare. The weighting
+ * only shapes training: after fitting, the bias is corrected so {@link #predictProbability} still
+ * gives probabilities on the real class balance rather than the reweighted one.
  */
 public class LogisticRegression {
 
@@ -16,6 +18,9 @@ public class LogisticRegression {
     private double b;
 
     public LogisticRegression(double learningRate, double l2, int epochs, double positiveWeight) {
+        if (!(positiveWeight > 0 && Double.isFinite(positiveWeight))) {
+            throw new IllegalArgumentException("positive weight must be a positive number, got " + positiveWeight);
+        }
         this.learningRate = learningRate;
         this.l2 = l2;
         this.epochs = epochs;
@@ -54,6 +59,9 @@ public class LogisticRegression {
                 b -= learningRate * gb / total;
             }
         }
+        // Weighting positives by k multiplies the odds the model learns by k. Taking log(k) off the
+        // bias undoes that, so probabilities match the real class balance; the ranking is unchanged.
+        b -= Math.log(positiveWeight);
         return this;
     }
 
