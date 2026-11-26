@@ -211,4 +211,87 @@ public final class Metrics {
             if (tp >= needed) return i < order.length ? (s + scores[order[i]]) / 2 : s;
         }
     }
+
+    /**
+     * Total cost of flagging every example scoring at least {@code threshold}: each fraud that
+     * slips through costs its {@code missCost}, and each genuine purchase flagged costs
+     * {@code falseAlarmCost}.
+     *
+     * @throws IllegalArgumentException under the same conditions as {@link #minCostThreshold}
+     */
+    public static double cost(double[] scores, boolean[] y, double[] missCost, double falseAlarmCost, double threshold) {
+        checkCostInputs(scores, y, missCost, falseAlarmCost);
+        double total = 0;
+        for (int i = 0; i < y.length; i++) {
+            boolean flagged = scores[i] >= threshold;
+            if (y[i] && !flagged) total += missCost[i];
+            else if (!y[i] && flagged) total += falseAlarmCost;
+        }
+        return total;
+    }
+
+    /**
+     * The threshold that minimises {@link #cost}: what missed fraud loses plus what false alarms
+     * cost to deal with.
+     *
+     * <p>F1 and recall targets count every fraud the same, but missing a £900 fraud is far worse
+     * than missing a £9 one. Passing each transaction's amount as its miss cost lets the threshold
+     * drop for the expensive cases' sake while a review cost keeps false alarms in check. Every
+     * distinct score is tried in one pass from highest to lowest, as is flagging nothing at all;
+     * on a tie the higher threshold wins, since it raises fewer alerts. Like
+     * {@link #bestF1Threshold}, the threshold returned sits halfway between the chosen score and
+     * the next lower one.
+     *
+     * @throws IllegalArgumentException if the arrays differ in length, a score is NaN, a miss cost
+     *         is negative or not finite, or the false alarm cost isn't a positive finite number
+     */
+    public static double minCostThreshold(double[] scores, boolean[] y, double[] missCost, double falseAlarmCost) {
+        checkCostInputs(scores, y, missCost, falseAlarmCost);
+        if (scores.length == 0) throw new IllegalArgumentException("no scores to choose a threshold from");
+
+        Integer[] order = new Integer[scores.length];
+        for (int i = 0; i < order.length; i++) order[i] = i;
+        Arrays.sort(order, Comparator.comparingDouble((Integer i) -> scores[i]).reversed());
+
+        // Start with nothing flagged: every fraud is missed. That's only reachable if a threshold
+        // above the top score still fits in 0-1.
+        double cost = 0;
+        for (int i = 0; i < y.length; i++) if (y[i]) cost += missCost[i];
+        double top = scores[order[0]];
+        double best = Double.NaN, bestCost = Double.POSITIVE_INFINITY;
+        if (top < 1) {
+            best = (top + 1) / 2;
+            bestCost = cost;
+        }
+
+        int i = 0;
+        while (i < order.length) {
+            double s = scores[order[i]];
+            while (i < order.length && scores[order[i]] == s) {
+                int k = order[i];
+                cost += y[k] ? -missCost[k] : falseAlarmCost;
+                i++;
+            }
+            if (cost < bestCost - 1e-9) {
+                bestCost = cost;
+                best = i < order.length ? (s + scores[order[i]]) / 2 : s;
+            }
+        }
+        return best;
+    }
+
+    private static void checkCostInputs(double[] scores, boolean[] y, double[] missCost, double falseAlarmCost) {
+        if (scores.length != y.length || missCost.length != y.length) {
+            throw new IllegalArgumentException("scores, labels and miss costs differ in length");
+        }
+        if (!(falseAlarmCost > 0 && Double.isFinite(falseAlarmCost))) {
+            throw new IllegalArgumentException("false alarm cost must be a positive number, got " + falseAlarmCost);
+        }
+        for (int i = 0; i < y.length; i++) {
+            if (Double.isNaN(scores[i])) throw new IllegalArgumentException("score " + i + " is NaN");
+            if (!(missCost[i] >= 0 && Double.isFinite(missCost[i]))) {
+                throw new IllegalArgumentException("miss cost " + i + " must be zero or more, got " + missCost[i]);
+            }
+        }
+    }
 }

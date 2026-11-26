@@ -37,6 +37,15 @@ public class FraudApp {
         System.out.printf("Recall target  catching 95%% of validation fraud needs threshold %.2f: on test, recall %.1f%%, precision %.1f%%, false alarms %d%n",
                 t95, 100 * c95.recall(), 100 * c95.precision(), c95.falsePositives());
 
+        double review = 5;
+        double[] amounts = FraudDetector.amounts(test);
+        double tCost = Metrics.minCostThreshold(detector.scores(validation), FraudDetector.labels(validation),
+                FraudDetector.amounts(validation), review);
+        Metrics.Confusion cc = Metrics.confusion(scores, y, tCost);
+        System.out.printf("Cost target    with £%.0f per false alarm and fraud lost at face value, threshold %.2f: on test, fraud missed %d, false alarms %d, total cost £%,.0f (F1 threshold: £%,.0f)%n",
+                review, tCost, cc.falseNegatives(), cc.falsePositives(),
+                Metrics.cost(scores, y, amounts, review, tCost), Metrics.cost(scores, y, amounts, review, detector.threshold()));
+
         System.out.println("\nWhat the model learned (weights on scaled features, higher = more suspicious):");
         double[] w = detector.weights();
         for (int j = 0; j < w.length; j++) System.out.printf("  %-15s %+.2f%n", Transaction.FEATURES[j], w[j]);

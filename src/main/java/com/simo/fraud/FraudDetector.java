@@ -160,6 +160,20 @@ public class FraudDetector {
         threshold = Metrics.thresholdForRecall(scores(validation), labels(validation), targetRecall);
     }
 
+    /**
+     * Sets the threshold that costs the least on a held-out validation set, where a missed fraud
+     * loses its amount and each false alarm costs {@code reviewCost} (an analyst's time, a call to
+     * the customer). Large frauds then count for more than small ones, which F1 ignores.
+     *
+     * @throws IllegalArgumentException if the review cost isn't a positive number or the set is
+     *         empty or lacks fraud or genuine purchases; the current threshold is kept in that case
+     */
+    public void calibrateForCost(List<Transaction> validation, double reviewCost) {
+        requireTrained("calibrate");
+        requireBothClasses(validation, "Validation data");
+        threshold = Metrics.minCostThreshold(scores(validation), labels(validation), amounts(validation), reviewCost);
+    }
+
     private static void requireBothClasses(List<Transaction> data, String what) {
         if (data == null || data.isEmpty()) throw new IllegalArgumentException(what + " is empty");
         long fraud = data.stream().filter(Transaction::fraud).count();
@@ -226,5 +240,10 @@ public class FraudDetector {
         boolean[] y = new boolean[data.size()];
         for (int i = 0; i < y.length; i++) y[i] = data.get(i).fraud();
         return y;
+    }
+
+    /** Each transaction's amount, which is what a missed fraud loses. */
+    static double[] amounts(List<Transaction> data) {
+        return data.stream().mapToDouble(Transaction::amount).toArray();
     }
 }

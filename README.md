@@ -14,6 +14,9 @@ Detects fraudulent card transactions with a logistic regression model written fr
 7. **Saving:** `save()` and `load()` store the trained model as a small text file, so it can score new transactions without retraining.
 8. **Evaluation:** precision, recall, F1, confusion matrix, ROC AUC and average precision on a test set the model never saw. With only 3% fraud, average precision (the area under the precision-recall curve) is the stricter measure: a model that guesses at random gets about 0.03 rather than ROC AUC's 0.5. Both of those only judge the ranking, so log loss is reported too: it checks the risk percentages themselves and punishes confident mistakes.
 
+## Choosing a threshold by cost
+F1 and recall targets count every fraud the same, but letting a £900 fraud through is much worse than missing a £9 one. `calibrateForCost(validation, 5)` picks the threshold with the lowest total cost on the validation set, where each missed fraud loses its amount and each false alarm costs £5 to review. `Metrics.minCostThreshold` and `Metrics.cost` do the same for any scores, labels and per-transaction costs. On the demo data this roughly halves the cost of the F1 threshold, by accepting more false alarms in exchange for missing fewer of the large frauds.
+
 ## Run
 ```bash
 mvn -q compile exec:java
