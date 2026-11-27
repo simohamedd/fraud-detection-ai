@@ -325,6 +325,59 @@ public final class Metrics {
         return best;
     }
 
+    /** One group of a reliability table: examples whose predicted risk fell in [lower, upper). */
+    public record CalibrationBin(double lower, double upper, int count, double meanPredicted, double observedRate) {
+        /** How far the predicted risk is from what actually happened in this group. */
+        public double gap() { return Math.abs(meanPredicted - observedRate); }
+    }
+
+    /**
+     * Groups examples into {@code bins} equal-width ranges of predicted probability and, for each
+     * range, compares the average prediction with the share that really were positive. When the
+     * probabilities are honest the two match: of the purchases scored around 20%, about one in
+     * five is fraud. Empty ranges are left out. A score of exactly 1 goes in the top range.
+     *
+     * @throws IllegalArgumentException if there are no bins or no scores, the inputs differ in
+     *         length, or a score is NaN or outside 0-1
+     */
+    public static java.util.List<CalibrationBin> calibrationTable(double[] scores, boolean[] y, int bins) {
+        if (bins < 1) throw new IllegalArgumentException("need at least one bin, got " + bins);
+        if (scores.length != y.length) throw new IllegalArgumentException("scores and labels differ in length");
+        if (scores.length == 0) throw new IllegalArgumentException("no scores to evaluate");
+        int[] count = new int[bins];
+        int[] positives = new int[bins];
+        double[] sum = new double[bins];
+        for (int i = 0; i < scores.length; i++) {
+            double s = scores[i];
+            if (!(s >= 0 && s <= 1)) throw new IllegalArgumentException("score " + i + " is not a probability: " + s);
+            int b = Math.min((int) (s * bins), bins - 1);
+            count[b]++;
+            sum[b] += s;
+            if (y[i]) positives[b]++;
+        }
+        java.util.List<CalibrationBin> out = new java.util.ArrayList<>();
+        for (int b = 0; b < bins; b++) {
+            if (count[b] == 0) continue;
+            out.add(new CalibrationBin((double) b / bins, (double) (b + 1) / bins, count[b],
+                    sum[b] / count[b], (double) positives[b] / count[b]));
+        }
+        return out;
+    }
+
+    /**
+     * Expected calibration error: the gap between predicted and observed fraud rate in each range
+     * of {@link #calibrationTable}, averaged with each range weighted by how many examples it holds.
+     * 0 means the risk percentages can be taken at face value. Unlike log loss it ignores ranking,
+     * so a model can rank well and still score badly here if its percentages are off.
+     *
+     * @throws IllegalArgumentException under the same conditions as {@link #calibrationTable}
+     */
+    public static double expectedCalibrationError(double[] scores, boolean[] y, int bins) {
+        double total = 0;
+        for (CalibrationBin b : calibrationTable(scores, y, bins)) total += b.count() * b.gap();
+        return total / scores.length;
+    }
+
     private static void checkCostInputs(double[] scores, boolean[] y, double[] missCost, double falseAlarmCost) {
         if (scores.length != y.length || missCost.length != y.length) {
             throw new IllegalArgumentException("scores, labels and miss costs differ in length");
