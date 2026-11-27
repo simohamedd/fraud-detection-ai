@@ -46,6 +46,13 @@ public class FraudApp {
                 review, tCost, cc.falseNegatives(), cc.falsePositives(),
                 Metrics.cost(scores, y, amounts, review, tCost), Metrics.cost(scores, y, amounts, review, detector.threshold()));
 
+        double budget = 0.05;
+        double tBudget = Metrics.thresholdForAlertRate(detector.scores(validation), budget);
+        Metrics.Confusion cb = Metrics.confusion(scores, y, tBudget);
+        int alerts = cb.truePositives() + cb.falsePositives();
+        System.out.printf("Alert budget   reviewing at most %.0f%% of purchases needs threshold %.3f: on test, %d alerts (%.2f%%), recall %.1f%%, precision %.1f%%%n",
+                100 * budget, tBudget, alerts, 100.0 * alerts / y.length, 100 * cb.recall(), 100 * cb.precision());
+
         System.out.println("\nWhat the model learned (weights on scaled features, higher = more suspicious):");
         double[] w = detector.weights();
         for (int j = 0; j < w.length; j++) System.out.printf("  %-15s %+.2f%n", Transaction.FEATURES[j], w[j]);
