@@ -17,6 +17,9 @@ Detects fraudulent card transactions with a logistic regression model written fr
 ## Choosing a threshold by cost
 F1 and recall targets count every fraud the same, but letting a £900 fraud through is much worse than missing a £9 one. `calibrateForCost(validation, 5)` picks the threshold with the lowest total cost on the validation set, where each missed fraud loses its amount and each false alarm costs £5 to review. `Metrics.minCostThreshold` and `Metrics.cost` do the same for any scores, labels and per-transaction costs. On the demo data this roughly halves the cost of the F1 threshold, by accepting more false alarms in exchange for missing fewer of the large frauds.
 
+## Working to an alert budget
+A review team can only look at so many alerts. `calibrateForAlertRate(recent, 0.01)` picks the lowest threshold that flags at most 1% of the given transactions, and `Metrics.thresholdForAlertRate` does the same for any scores. Labels aren't needed, so it can be recalibrated on recent traffic. The budget is exact on the transactions it was set on and approximate on new ones (the demo flags 5.4% of the test set against a 5% budget), so leave a little headroom. Tied scores are flagged together, so a tie that would go over the budget is left out and slightly fewer alerts than the budget may be raised. The demo prints what recall and precision a 5% budget gets on the test set; a budget below the fraud rate (about 3%) can only catch part of the fraud however good the model is.
+
 ## Run
 ```bash
 mvn -q compile exec:java

@@ -3,7 +3,7 @@ package com.simo.fraud;
 import java.util.Arrays;
 import java.util.Comparator;
 
-/** Evaluation for a binary classifier: confusion matrix, precision, recall, F1, ROC AUC, average precision and log loss. */
+/** Evaluation for a binary classifier: confusion matrix, precision, recall, F1, ROC AUC, average precision and log loss, plus ways to choose a threshold. */
 public final class Metrics {
 
     public record Confusion(int truePositives, int falsePositives, int trueNegatives, int falseNegatives) {
@@ -210,6 +210,51 @@ public final class Metrics {
             }
             if (tp >= needed) return i < order.length ? (s + scores[order[i]]) / 2 : s;
         }
+    }
+
+    /**
+     * The lowest threshold that flags at most {@code maxAlertRate} of the examples.
+     *
+     * <p>A review team can only look at so many alerts a day, so the useful question is often
+     * "which threshold keeps us within 1% of transactions?". Scores are walked from highest to
+     * lowest and tied scores are flagged together, so a group that would push the count over the
+     * budget is left out entirely and the rate flagged can come in under the target. Like
+     * {@link #bestF1Threshold}, the threshold returned sits halfway between the last score flagged
+     * and the next lower one. If even the top score's group is over budget, the threshold sits
+     * above every score and nothing is flagged.
+     *
+     * @throws IllegalArgumentException if the rate isn't in (0, 1], there are no scores, or a
+     *         score is NaN
+     */
+    public static double thresholdForAlertRate(double[] scores, double maxAlertRate) {
+        if (!(maxAlertRate > 0 && maxAlertRate <= 1)) {
+            throw new IllegalArgumentException("alert rate must be in (0, 1], got " + maxAlertRate);
+        }
+        if (scores.length == 0) throw new IllegalArgumentException("no scores to choose a threshold from");
+        for (int i = 0; i < scores.length; i++) {
+            if (Double.isNaN(scores[i])) throw new IllegalArgumentException("score " + i + " is NaN");
+        }
+        double[] sorted = scores.clone();
+        Arrays.sort(sorted);
+        int n = sorted.length;
+        // Compare counts rather than ratios so 1% of 300 allows exactly 3 alerts.
+        int allowed = (int) Math.floor(maxAlertRate * n + 1e-9);
+
+        int flagged = 0;
+        int i = n - 1;
+        double lastFlagged = Double.NaN;
+        while (i >= 0) {
+            double s = sorted[i];
+            int j = i;
+            while (j >= 0 && sorted[j] == s) j--;
+            if (flagged + (i - j) > allowed) break;
+            flagged += i - j;
+            lastFlagged = s;
+            i = j;
+        }
+        double top = sorted[n - 1];
+        if (flagged == 0) return top < 1 ? (top + 1) / 2 : Math.nextUp(top);
+        return i >= 0 ? (lastFlagged + sorted[i]) / 2 : lastFlagged;
     }
 
     /**

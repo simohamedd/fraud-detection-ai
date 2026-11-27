@@ -174,6 +174,20 @@ public class FraudDetector {
         threshold = Metrics.minCostThreshold(scores(validation), labels(validation), amounts(validation), reviewCost);
     }
 
+    /**
+     * Sets the lowest threshold that flags at most {@code maxAlertRate} of a held-out set, for when
+     * the review team can only handle a fixed share of transactions. Labels aren't needed, so recent
+     * unlabelled traffic works as well as a validation set.
+     *
+     * @throws IllegalArgumentException if the rate isn't in (0, 1] or the set is empty; the current
+     *         threshold is kept in that case
+     */
+    public void calibrateForAlertRate(List<Transaction> recent, double maxAlertRate) {
+        requireTrained("calibrate");
+        if (recent == null || recent.isEmpty()) throw new IllegalArgumentException("Transactions to calibrate on are empty");
+        threshold = Metrics.thresholdForAlertRate(scores(recent), maxAlertRate);
+    }
+
     private static void requireBothClasses(List<Transaction> data, String what) {
         if (data == null || data.isEmpty()) throw new IllegalArgumentException(what + " is empty");
         long fraud = data.stream().filter(Transaction::fraud).count();
