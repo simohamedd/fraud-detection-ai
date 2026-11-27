@@ -26,6 +26,8 @@ public class FraudApp {
         double baseline = -(fraudRate * Math.log(fraudRate) + (1 - fraudRate) * Math.log(1 - fraudRate));
         System.out.printf("Log loss    %.3f  (how honest the probabilities are; always guessing the fraud rate gets %.3f)%n",
                 Metrics.logLoss(scores, y), baseline);
+        System.out.printf("Calib. err  %.4f  (average gap between predicted and actual fraud rate)%n",
+                Metrics.expectedCalibrationError(scores, y, 10));
         System.out.printf("Threshold   %.2f%n", detector.threshold());
         System.out.printf("Precision   %.1f%%  (of transactions flagged, how many were fraud)%n", 100 * c.precision());
         System.out.printf("Recall      %.1f%%  (of all fraud, how much was caught)%n", 100 * c.recall());
@@ -53,6 +55,12 @@ public class FraudApp {
         java.nio.file.Path saved = java.nio.file.Path.of("fraud-model.properties");
         detector.save(saved);
         detector = FraudDetector.load(saved);
+        System.out.println("\nDo the risk percentages hold up? Test purchases grouped by predicted risk:");
+        System.out.println("  risk range    purchases  predicted  actually fraud");
+        for (Metrics.CalibrationBin b : Metrics.calibrationTable(scores, y, 10)) {
+            System.out.printf("  %3.0f%% - %3.0f%%  %9d  %8.1f%%  %13.1f%%%n",
+                    100 * b.lower(), 100 * b.upper(), b.count(), 100 * b.meanPredicted(), 100 * b.observedRate());
+        }
         System.out.println("\nSaved the model to " + saved + " and loaded it back.");
 
         System.out.println("\nScoring two new purchases:");
