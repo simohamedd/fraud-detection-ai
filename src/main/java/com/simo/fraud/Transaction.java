@@ -18,6 +18,30 @@ public record Transaction(double amount, int hourOfDay, double distanceFromHomeK
         "log amount", "night time", "log distance", "merchant risk", "online", "tx last hour"
     };
 
+    /**
+     * Rejects values the model can't score. Without this, a negative or NaN amount or distance turns into a
+     * NaN score, which never reaches the threshold, so the purchase would be silently approved.
+     */
+    public Transaction {
+        requireNonNegative(amount, "amount");
+        requireNonNegative(distanceFromHomeKm, "distanceFromHomeKm");
+        if (hourOfDay < 0 || hourOfDay > 23) {
+            throw new IllegalArgumentException("hourOfDay must be between 0 and 23, got " + hourOfDay);
+        }
+        if (!(merchantRisk >= 0 && merchantRisk <= 1)) {
+            throw new IllegalArgumentException("merchantRisk must be between 0 and 1, got " + merchantRisk);
+        }
+        if (txLastHour < 0) {
+            throw new IllegalArgumentException("txLastHour can't be negative, got " + txLastHour);
+        }
+    }
+
+    private static void requireNonNegative(double value, String name) {
+        if (!Double.isFinite(value) || value < 0) {
+            throw new IllegalArgumentException(name + " must be a finite number of zero or more, got " + value);
+        }
+    }
+
     /** Turns the raw transaction into the numeric features the model uses. */
     public double[] features() {
         boolean night = hourOfDay < 6 || hourOfDay >= 23;
