@@ -11,6 +11,7 @@ import java.io.Reader;
 import java.io.Writer;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Random;
 
 /** Ties together feature scaling, the model and a decision threshold. */
 public class FraudDetector {
@@ -212,7 +213,11 @@ public class FraudDetector {
 
     public double score(Transaction t) {
         requireTrained("score with");
-        return model.predictProbability(scaler.transform(t.features()));
+        return scoreFeatures(t.features());
+    }
+
+    private double scoreFeatures(double[] features) {
+        return model.predictProbability(scaler.transform(features));
     }
 
     public boolean isFraud(Transaction t) {
@@ -235,6 +240,56 @@ public class FraudDetector {
         for (int j = 0; j < w.length; j++) out.add(new Contribution(Transaction.FEATURES[j], w[j] * x[j]));
         out.sort(Comparator.comparingDouble((Contribution c) -> Math.abs(c.logOdds())).reversed());
         return out;
+    }
+
+    /** How much average precision drops when one feature is shuffled; bigger means the model relies on it more. */
+    public record Importance(String feature, double drop) { }
+
+    /**
+     * Permutation importance on a held-out set: each feature in turn is shuffled across the
+     * transactions, breaking its link with the label, and the drop in average precision is
+     * averaged over {@code repeats} shuffles. Unlike the raw weights, this shows how much each
+     * signal matters for ranking fraud on data the model hasn't seen. A drop near zero means the
+     * model barely uses that feature. Results are sorted, most important first.
+     *
+     * @throws IllegalArgumentException if {@code repeats} is less than 1 or the set is empty or
+     *         lacks fraud or genuine purchases
+     */
+    public List<Importance> permutationImportance(List<Transaction> data, int repeats, long seed) {
+        requireTrained("measure feature importance for");
+        if (repeats < 1) throw new IllegalArgumentException("repeats must be at least 1, got " + repeats);
+        requireBothClasses(data, "Data for feature importance");
+        double[][] x = features(data);
+        boolean[] y = labels(data);
+        double base = Metrics.averagePrecision(scoreRows(x), y);
+        Random r = new Random(seed);
+        int[] order = new int[x.length];
+        List<Importance> out = new ArrayList<>();
+        for (int j = 0; j < Transaction.FEATURES.length; j++) {
+            double total = 0;
+            for (int rep = 0; rep < repeats; rep++) {
+                for (int i = 0; i < order.length; i++) order[i] = i;
+                for (int i = order.length - 1; i > 0; i--) {
+                    int k = r.nextInt(i + 1);
+                    int t = order[i]; order[i] = order[k]; order[k] = t;
+                }
+                double[][] shuffled = new double[x.length][];
+                for (int i = 0; i < x.length; i++) {
+                    shuffled[i] = x[i].clone();
+                    shuffled[i][j] = x[order[i]][j];
+                }
+                total += base - Metrics.averagePrecision(scoreRows(shuffled), y);
+            }
+            out.add(new Importance(Transaction.FEATURES[j], total / repeats));
+        }
+        out.sort(Comparator.comparingDouble(Importance::drop).reversed());
+        return out;
+    }
+
+    private double[] scoreRows(double[][] x) {
+        double[] s = new double[x.length];
+        for (int i = 0; i < x.length; i++) s[i] = scoreFeatures(x[i]);
+        return s;
     }
 
     public double threshold() {

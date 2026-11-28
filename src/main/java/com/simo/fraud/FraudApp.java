@@ -59,6 +59,11 @@ public class FraudApp {
         double[] w = detector.weights();
         for (int j = 0; j < w.length; j++) System.out.printf("  %-15s %+.2f%n", Transaction.FEATURES[j], w[j]);
 
+        System.out.println("\nWhat it relies on (drop in average precision on test when the signal is shuffled):");
+        for (FraudDetector.Importance imp : detector.permutationImportance(test, 5, 7)) {
+            System.out.printf("  %-15s %.3f%n", imp.feature(), imp.drop());
+        }
+
         java.nio.file.Path saved = java.nio.file.Path.of("fraud-model.properties");
         detector.save(saved);
         detector = FraudDetector.load(saved);
